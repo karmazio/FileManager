@@ -6,5 +6,6 @@
         <file>export.png</file>
         <file>stop.png</file>
         <file>resume.png</file>
+        <file>pause.png</file>
     </qresource>
 </RCC>

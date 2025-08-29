@@ -37,7 +37,7 @@ private slots:
     // Slots for updating UI (called from scanner signals)
     void onProgressUpdated(int percent, const QString &currentFile, const FileStats &stats);
     void onFileFound(const FileItem &file);
-    void onScanFinished(const QList<FileItem> &allFiles, const FileStats &stats);
+    void onScanFinished(bool completed, const QList<FileItem> &allFiles, const FileStats &stats);
     void onScanError(const QString &error);
 
 private:

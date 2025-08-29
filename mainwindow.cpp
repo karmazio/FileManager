@@ -54,24 +54,56 @@ void MainWindow::onStartScan() {
         return;
     }
 
-    // resume if there is a worker on pause
-    if (scanner && scanState == ScanState::Paused) {
-        scanner->resumeScanning();
-        scanState = ScanState::Running;
-        ui->btnStop->setText("Stop");
-        ui->btnStop->setIcon(QIcon(":/icons/stop.png"));
-        ui->lblStatus->setText("Scanning...");
+
+    if(scanState == ScanState::Running) {
+        onPauseScan();
+        return;
+    }
+
+    if(scanState == ScanState::Paused) {
+        onResumeScan();
         return;
     }
 
     // new launch
+    ui->btnStop->setEnabled(true);
+
     ui->lblStatus->setText("Scanning...");
     ui->progressBar->setValue(0);
     ui->tableFiles->setRowCount(0);
 
+
     scanState = ScanState::Running;
-    ui->btnStop->setText("Stop");
-    ui->btnStop->setIcon(QIcon(":/icons/stop.png"));
+    ui->btnScan->setText("Pause");
+    ui->btnScan->setIcon(QIcon(":/icons/pause.png"));
+
+    // -- Preventing forced spread of the window on long file paths --
+    ui->lblProgress->setMinimumWidth(300);
+    ui->lblProgress->setMaximumWidth(this->width());
+    ui->lblProgress->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui->lblProgress->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    ui->lblTotalFiles->setMinimumWidth(300);
+    ui->lblTotalFiles->setMaximumWidth(this->width());
+    ui->lblTotalFiles->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui->lblTotalFiles->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    ui->lblTotalSize->setMinimumWidth(300);
+    ui->lblTotalSize->setMaximumWidth(this->width());
+    ui->lblTotalSize->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui->lblTotalSize->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    ui->lblLargestFile->setMinimumWidth(300);
+    ui->lblLargestFile->setMaximumWidth(this->width());
+    ui->lblLargestFile->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui->lblLargestFile->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    ui->lblMostCommon->setMinimumWidth(300);
+    ui->lblMostCommon->setMaximumWidth(this->width());
+    ui->lblMostCommon->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui->lblMostCommon->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    // ----
 
     scanner = new FileScanner();
     scannerThread = new QThread();
@@ -100,20 +132,21 @@ void MainWindow::onStartScan() {
 void MainWindow::onStopScan() {
     if (!scanner) return;
 
-    if (scanState == ScanState::Running) {
-        // PAUSE
-        scanner->pauseScanning();
-        scanState = ScanState::Paused;
-        ui->btnStop->setText("Resume");
-        ui->btnStop->setIcon(QIcon(":/icons/resume.png"));
-        ui->lblStatus->setText("Scan paused");
-    } else if (scanState == ScanState::Paused) {
-        // RESUME
-        scanner->resumeScanning();
-        scanState = ScanState::Running;
-        ui->btnStop->setText("Stop");
-        ui->btnStop->setIcon(QIcon(":/icons/stop.png"));
-        ui->lblStatus->setText("Scanning...");
+    if (scanState == ScanState::Running || scanState == ScanState::Paused) {
+        scanner->stopScanning();
+        ui->btnScan->setText("Scan");
+        ui->btnScan->setIcon(QIcon(":/icons/search.png"));
+
+        ui->btnStop->setEnabled(false);
+        ui->lblStatus->setText("Scan stopped.");
+
+        ui->progressBar->setValue(0);
+        ui->tableFiles->setRowCount(0);
+
+        ui->lblProgress->setText("Please select a new folder");
+
+        updateStats(0, 0.0, "", 0.0, "");
+
     }
 }
 
@@ -121,6 +154,9 @@ void MainWindow::onPauseScan() {
     if (scanner && scanState == ScanState::Running) {
         scanner->pauseScanning();
         scanState = ScanState::Paused;
+        ui->btnScan->setText("Resume");
+        ui->btnScan->setIcon(QIcon(":/icons/resume.png"));
+
         ui->lblStatus->setText("Scan paused");
     }
 }
@@ -129,8 +165,37 @@ void MainWindow::onResumeScan() {
     if (scanner && scanState == ScanState::Paused) {
         scanner->resumeScanning();
         scanState = ScanState::Running;
+        ui->btnScan->setText("Pause");
+        ui->btnScan->setIcon(QIcon(":/icons/pause.png"));
+
         ui->lblStatus->setText("Scan resumed");
     }
+}
+
+void MainWindow::onScanFinished(bool completed, const QList<FileItem> &allFiles, const FileStats &stats) {
+    // Completed or terminated by the user
+    scanState = ScanState::Idle;
+
+    ui->btnScan->setText("Scan");
+    ui->btnScan->setIcon(QIcon(":/icons/search.png"));
+    ui->btnStop->setEnabled(false);
+    ui->lblProgress->setText("Please select a new folder");
+
+    if (completed) {
+        ui->lblStatus->setText("✅ Scan finished");
+        ui->progressBar->setValue(100);
+        updateStats(stats.totalFiles, stats.totalSizeMB, stats.largestFileName, stats.largestFileSizeMB, stats.mostCommonExt);
+    } else {
+        ui->lblStatus->setText("❌ Scan cancelled");
+        ui->progressBar->setValue(0);
+        ui->tableFiles->setRowCount(0);
+        updateStats(0, 0.0, "", 0.0, "");
+    }
+
+    //
+    scanner = nullptr;
+    scannerThread = nullptr;
+
 }
 
 void MainWindow::onScanError(const QString &error) {
@@ -139,8 +204,13 @@ void MainWindow::onScanError(const QString &error) {
     // Update scan state
     scanState = ScanState::Idle;
     ui->lblStatus->setText("Scan failed");
-    ui->btnStop->setText("Stop");
-    ui->btnStop->setIcon(QIcon(":/icons/stop.png"));
+    ui->btnScan->setText("Scan");
+    ui->btnScan->setIcon(QIcon(":/icons/search.png"));
+
+    ui->progressBar->setValue(0);
+    ui->tableFiles->setRowCount(0);
+
+    ui->btnStop->setEnabled(false);
 }
 
 void MainWindow::onExport() {
@@ -197,21 +267,7 @@ void MainWindow::onFileFound(const FileItem &file) {
     ui->tableFiles->setItem(row, 3, dateItem);
 }
 
-void MainWindow::onScanFinished(const QList<FileItem> &/*allFiles*/, const FileStats &stats) {
-    ui->lblStatus->setText("✅ Scan finished");
-    scanState = ScanState::Idle;
 
-    ui->btnStop->setText("Stop");
-    ui->btnStop->setIcon(QIcon(":/icons/stop.png"));
-
-    ui->lblProgress->setText("Please select a new folder");
-
-    updateStats(stats.totalFiles,
-                stats.totalSizeMB,
-                stats.largestFileName,
-                stats.largestFileSizeMB,
-                stats.mostCommonExt);
-}
 
 void MainWindow::updateStats(int totalFiles,
                              double totalSizeMB,
@@ -226,3 +282,4 @@ void MainWindow::updateStats(int totalFiles,
                                     .arg(largestFileSizeMB, 0, 'f', 2));
     ui->lblMostCommon->setText(QString("The most common type: %1").arg(mostCommonExt));
 }
+
